@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>EcoTrace — Methane Tracker & Micro-Grants</title>
+
+  <!-- Search Engine & Mobile App Metadata -->
+  <meta name="description" content="EcoTrace is an open-data community methane tracker routing cleanup micro-grants directly to local waste teams.">
+  <meta name="author" content="EcoTrace Global Network">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#059669">
+
+  <!-- Tailwind CSS & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet Map library -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    #map { height: 420px; width: 100%; border-radius: 0.75rem; }
+    .nav-btn.active { background-color: #059669; color: #ffffff; }
+    body { -webkit-tap-highlight-color: transparent; user-select: none; }
+    input, textarea, select { user-select: text; }
+
+    /* Orbiting Satellite Animation */
+    @keyframes orbit {
+      0% { transform: rotate(0deg) translateX(12px) rotate(0deg); }
+      100% { transform: rotate(360deg) translateX(12px) rotate(-360deg); }
+    }
+    .satellite-orbit {
+      animation: orbit 4s linear infinite;
+      transform-origin: 16px 16px;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen pb-12">
+
+  <!-- Header Navigation Bar -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <!-- Earth with Rotating Satellite Logo -->
+        <div class="bg-emerald-950/80 border border-emerald-500/30 p-2 rounded-xl text-emerald-400 relative flex items-center justify-center">
+          <svg class="w-8 h-8 text-emerald-400 overflow-visible" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Earth Globe -->
+            <circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="2" class="text-emerald-400"/>
+            <path d="M6 16C6 16 10 12 16 12C22 12 26 16 26 16" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>
+            <path d="M16 6C16 6 12 10 12 16C12 22 16 26 16 26" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>
+            <path d="M10 10C12 12 20 12 22 10" stroke="currentColor" stroke-width="1.5"/>
+            <!-- Orbit Path Ring -->
+            <ellipse cx="16" cy="16" rx="14" ry="5" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1" transform="rotate(-25 16 16)"/>
+            <!-- Rotating Satellite -->
+            <g class="satellite-orbit">
+              <circle cx="16" cy="4" r="2.5" fill="#10B981"/>
+              <path d="M13.5 4H18.5" stroke="#34D399" stroke-width="1"/>
+            </g>
+          </svg>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight text-white block leading-none">EcoTrace</span>
+          <span class="text-[10px] text-emerald-400 font-medium tracking-wide">SATELLITE METHANE TRACKER</span>
+        </div>
+      </div>
+      <span class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Network Active
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-6">
+
+    <!-- Navigation Tabs -->
+    <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700 mb-6 max-w-lg mx-auto">
+      <button onclick="switchTab('report')" id="tab-report" class="nav-btn active flex-1 py-2 text-xs md:text-sm font-semibold rounded-lg transition-all flex justify-center items-center gap-1.5">
+        <i data-lucide="camera" class="w-4 h-4"></i> Report
+      </button>
+      <button onclick="switchTab('mapTab')" id="tab-mapTab" class="nav-btn flex-1 py-2 text-xs md:text-sm font-semibold rounded-lg transition-all flex justify-center items-center gap-1.5 text-slate-400">
+        <i data-lucide="map" class="w-4 h-4"></i> Map
+      </button>
+      <button onclick="switchTab('grants')" id="tab-grants" class="nav-btn flex-1 py-2 text-xs md:text-sm font-semibold rounded-lg transition-all flex justify-center items-center gap-1.5 text-slate-400">
+        <i data-lucide="coins" class="w-4 h-4"></i> Grants
+      </button>
+      <button onclick="switchTab('analytics')" id="tab-analytics" class="nav-btn flex-1 py-2 text-xs md:text-sm font-semibold rounded-lg transition-all flex justify-center items-center gap-1.5 text-slate-400">
+        <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Analytics
+      </button>
+    </div>
+
+    <!-- TAB 1: REPORT DUMP SITE -->
+    <section id="view-report" class="space-y-6">
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 max-w-xl mx-auto shadow-xl">
+        <h2 class="text-xl font-bold mb-1 text-white">Submit Methane Point Report</h2>
+        <p class="text-slate-400 text-sm mb-6">Capture unmanaged waste hotspots to route micro-grants directly to local cleanup teams.</p>
+
+        <form id="dumpForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Dump Site Photo</label>
+            <div onclick="document.getElementById('photoInput').click()" class="border-2 border-dashed border-slate-600 hover:border-emerald-500 bg-slate-900/50 p-6 rounded-xl text-center cursor-pointer transition">
+              <i data-lucide="upload-cloud" class="w-8 h-8 text-emerald-400 mx-auto mb-2"></i>
+              <p class="text-sm text-slate-300 font-medium">Click to select or upload photo</p>
+              <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="previewImage(event)" />
+            </div>
+            <img id="imgPreview" class="hidden mt-3 rounded-lg w-full h-48 object-cover border border-slate-700" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Location Coordinates (Latitude, Longitude)</label>
+            <div class="flex gap-2">
+              <input type="text" id="geoInput" placeholder="-1.0388, 37.0833" required class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500" />
+              <button type="button" onclick="getGPS()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1">
+                <i data-lucide="crosshair" class="w-4 h-4"></i> Get GPS
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Estimated Waste Volume</label>
+            <select id="volumeInput" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+              <option value="Small">Small Dumping (&lt; 1 Ton)</option>
+              <option value="Medium">Medium Overflow (1–5 Tons)</option>
+              <option value="Large">Large Informal Dump (&gt; 5 Tons)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">Site Notes</label>
+            <textarea id="descInput" rows="3" placeholder="Describe waste types (e.g., organic food waste, market residue)..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500" required></textarea>
+          </div>
+
+          <button type="submit" id="submitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition shadow-lg flex justify-center items-center gap-2">
+            <i data-lucide="send" class="w-4 h-4"></i> Submit & Pin on Map
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 2: LIVE MAP -->
+    <section id="view-mapTab" class="hidden space-y-4">
+      <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+        <div id="map"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MICRO-GRANTS -->
+    <section id="view-grants" class="hidden space-y-6">
+      <div id="grantList" class="grid md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- TAB 4: ANALYTICS DASHBOARD -->
+    <section id="view-analytics" class="hidden space-y-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <p class="text-xs text-slate-400 font-medium">Total Sites Recorded</p>
+          <h3 id="stat-total" class="text-2xl font-bold text-white mt-1">0</h3>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <p class="text-xs text-slate-400 font-medium">Grants Allocated</p>
+          <h3 id="stat-funds" class="text-2xl font-bold text-emerald-400 mt-1">$0</h3>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <p class="text-xs text-slate-400 font-medium">High Risk Hotspots</p>
+          <h3 id="stat-highrisk" class="text-2xl font-bold text-rose-400 mt-1">0</h3>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <p class="text-xs text-slate-400 font-medium">Est. Methane Diverted</p>
+          <h3 id="stat-methane" class="text-2xl font-bold text-cyan-400 mt-1">0 kg</h3>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700">
+          <h4 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <i data-lucide="shield-alert" class="w-4 h-4 text-emerald-400"></i> Risk Level Distribution
+          </h4>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">High Risk (&gt; 5 Tons)</span>
+                <span id="label-high" class="text-rose-400 font-semibold">0</span>
+              </div>
+              <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                <div id="bar-high" class="bg-rose-500 h-full w-0 transition-all duration-500"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">Medium Risk (1–5 Tons)</span>
+                <span id="label-medium" class="text-amber-400 font-semibold">0</span>
+              </div>
+              <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                <div id="bar-medium" class="bg-amber-500 h-full w-0 transition-all duration-500"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">Low Risk (&lt; 1 Ton)</span>
+                <span id="label-low" class="text-emerald-400 font-semibold">0</span>
+              </div>
+              <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                <div id="bar-low" class="bg-emerald-500 h-full w-0 transition-all duration-500"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700">
+          <h4 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i> Remediation Progress
+          </h4>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">Active / Pending Cleanup</span>
+                <span id="label-unfunded" class="text-amber-400 font-semibold">0</span>
+              </div>
+              <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                <div id="bar-unfunded" class="bg-amber-500 h-full w-0 transition-all duration-500"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">Grant Disbursed / Cleared</span>
+                <span id="label-funded" class="text-emerald-400 font-semibold">0</span>
+              </div>
+              <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                <div id="bar-funded" class="bg-emerald-500 h-full w-0 transition-all duration-500"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="mt-12 py-6 text-center border-t border-slate-800 text-slate-400 text-xs">
+    <p>© EcoTrace — Environmental Methane Hotspot Tracker.</p>
+  </footer>
+
+  <script>
+    // =========================================================================
+    // INSERT YOUR GOOGLE APPS SCRIPT API URL BELOW
+    // =========================================================================
+    const API_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID_HERE/exec";
+
+    let dumpSites = [];
+    let map, mapInitialized = false;
+    let mapMarkers = [];
+
+    lucide.createIcons();
+    window.addEventListener('load', fetchSites);
+
+    function fetchSites() {
+      fetch(`${API_URL}?action=getSites`)
+        .then(res => res.json())
+        .then(data => {
+          dumpSites = data;
+          renderAnalytics();
+          if (mapInitialized) updateMapMarkers();
+        })
+        .catch(err => console.error("Error connecting to backend:", err));
+    }
+
+    function switchTab(tabName) {
+      ['report', 'mapTab', 'grants', 'analytics'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).classList.remove('active');
+        document.getElementById(`tab-${t}`).classList.add('text-slate-400');
+      });
+
+      document.getElementById(`view-${tabName}`).classList.remove('hidden');
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.remove('text-slate-400');
+
+      if (tabName === 'mapTab') setTimeout(initMap, 100);
+      if (tabName === 'grants') renderGrants();
+      if (tabName === 'analytics') renderAnalytics();
+    }
+
+    function getGPS() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            document.getElementById('geoInput').value = `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+          },
+          err => {
+            alert('Unable to fetch GPS. Defaulting to local coordinates.');
+            document.getElementById('geoInput').value = '-1.0388, 37.0833';
+          }
+        );
+      } else {
+        alert("Geolocation is not supported on this device/browser.");
+      }
+    }
+
+    function previewImage(event) {
+      const reader = new FileReader();
+      reader.onload = function() {
+        const preview = document.getElementById('imgPreview');
+        preview.src = reader.result;
+        preview.classList.remove('hidden');
+      }
+      if (event.target.files[0]) reader.readAsDataURL(event.target.files[0]);
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Submitting...';
+
+      const coords = document.getElementById('geoInput').value.split(',');
+      const targetLat = coords[0] ? parseFloat(coords[0].trim()) : -1.0388;
+      const targetLng = coords[1] ? parseFloat(coords[1].trim()) : 37.0833;
+
+      const newSite = {
+        id: Date.now(),
+        lat: targetLat,
+        lng: targetLng,
+        volume: document.getElementById('volumeInput').value,
+        desc: document.getElementById('descInput').value,
+        risk: document.getElementById('volumeInput').value === 'Large' ? 'High Risk' : (document.getElementById('volumeInput').value === 'Medium' ? 'Medium Risk' : 'Low Risk'),
+        grantAmount: document.getElementById('volumeInput').value === 'Large' ? 500 : (document.getElementById('volumeInput').value === 'Medium' ? 300 : 150),
+        status: 'Needs Funding'
+      };
+
+      // Add directly to local list for immediate map centering
+      dumpSites.push(newSite);
+
+      fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSite)
+      }).then(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Submit & Pin on Map';
+        alert('Report logged! Center map on coordinates.');
+        document.getElementById('dumpForm').reset();
+        document.getElementById('imgPreview').classList.add('hidden');
+        
+        // Switch to map tab and zoom directly to submitted lat/lng
+        switchTab('mapTab');
+        if (map) {
+          map.setView([targetLat, targetLng], 15);
+          updateMapMarkers();
+        }
+        fetchSites();
+      }).catch(err => {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Submit & Pin on Map';
+        alert('Report saved locally.');
+        switchTab('mapTab');
+      });
+    }
+
+    function initMap() {
+      if (!mapInitialized) {
+        // Default center
+        map = L.map('map').setView([-1.0388, 37.0833], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        mapInitialized = true;
+      }
+      updateMapMarkers();
+    }
+
+    function updateMapMarkers() {
+      if (!map) return;
+
+      // Clear old markers
+      mapMarkers.forEach(m => map.removeLayer(m));
+      mapMarkers = [];
+
+      // Add marker for each logged lat/lng coordinate point
+      dumpSites.forEach(site => {
+        const lat = parseFloat(site.lat);
+        const lng = parseFloat(site.lng);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          const marker = L.marker([lat, lng]).addTo(map)
+            .bindPopup(`
+              <div class="p-1">
+                <span class="text-xs font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">Latitude: ${lat.toFixed(4)}, Longitude: ${lng.toFixed(4)}</span>
+                <br><br>
+                <b>Volume:</b> ${site.volume}<br>
+                <b>Risk:</b> ${site.risk || 'Assessed'}<br>
+                <p class="text-xs mt-1">${site.desc}</p>
+              </div>
+            `);
+          mapMarkers.push(marker);
+        }
+      });
+    }
+
+    function renderGrants() {
+      const container = document.getElementById('grantList');
+      container.innerHTML = '';
+      if (dumpSites.length === 0) {
+        container.innerHTML = `<p class="text-slate-400 text-sm">No active grant listings found.</p>`;
+        return;
+      }
+      dumpSites.forEach(site => {
+        container.innerHTML += `
+          <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-sm font-bold text-white">Site #${site.id.toString().slice(-4)}</span>
+              <span class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-semibold">$${site.grantAmount} Grant</span>
+            </div>
+            <p class="text-xs font-mono text-emerald-400 mb-1">📍 ${site.lat}, ${site.lng}</p>
+            <p class="text-xs text-slate-300 mb-4">${site.desc}</p>
+            <button onclick="applyGrant(${site.id})" ${site.status === 'Grant Assigned' ? 'disabled' : ''} class="w-full py-2.5 ${site.status === 'Grant Assigned' ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'} rounded-lg text-sm font-semibold transition">
+              ${site.status === 'Grant Assigned' ? 'Grant Disbursed' : 'Apply for Grant'}
+            </button>
+          </div>
+        `;
+      });
+    }
+
+    function renderAnalytics() {
+      const total = dumpSites.length;
+      let totalFunds = 0;
+      let highRisk = 0, medRisk = 0, lowRisk = 0;
+      let funded = 0, unfunded = 0;
+      let methaneKg = 0;
+
+      dumpSites.forEach(s => {
+        totalFunds += (s.grantAmount || 0);
+        if (s.volume === 'Large' || s.risk === 'High Risk') {
+          highRisk++;
+          methaneKg += 250;
+        } else if (s.volume === 'Medium' || s.risk === 'Medium Risk') {
+          medRisk++;
+          methaneKg += 100;
+        } else {
+          lowRisk++;
+          methaneKg += 35;
+        }
+
+        if (s.status === 'Grant Assigned') funded++;
+        else unfunded++;
+      });
+
+      document.getElementById('stat-total').innerText = total;
+      document.getElementById('stat-funds').innerText = `$${totalFunds}`;
+      document.getElementById('stat-highrisk').innerText = highRisk;
+      document.getElementById('stat-methane').innerText = `${methaneKg} kg`;
+
+      document.getElementById('label-high').innerText = `${highRisk} (${total ? Math.round((highRisk/total)*100) : 0}%)`;
+      document.getElementById('label-medium').innerText = `${medRisk} (${total ? Math.round((medRisk/total)*100) : 0}%)`;
+      document.getElementById('label-low').innerText = `${lowRisk} (${total ? Math.round((lowRisk/total)*100) : 0}%)`;
+
+      document.getElementById('bar-high').style.width = total ? `${(highRisk/total)*100}%` : '0%';
+      document.getElementById('bar-medium').style.width = total ? `${(medRisk/total)*100}%` : '0%';
+      document.getElementById('bar-low').style.width = total ? `${(lowRisk/total)*100}%` : '0%';
+
+      document.getElementById('label-funded').innerText = `${funded} (${total ? Math.round((funded/total)*100) : 0}%)`;
+      document.getElementById('label-unfunded').innerText = `${unfunded} (${total ? Math.round((unfunded/total)*100) : 0}%)`;
+
+      document.getElementById('bar-funded').style.width = total ? `${(funded/total)*100}%` : '0%';
+      document.getElementById('bar-unfunded').style.width = total ? `${(unfunded/total)*100}%` : '0%';
+    }
+
+    function applyGrant(id) {
+      fetch(`${API_URL}?action=claimGrant&siteId=${id}`)
+        .then(res => res.json())
+        .then(res => {
+          alert('Grant awarded to cleanup team!');
+          fetchSites();
+          renderGrants();
+        });
+    }
+  </script>
+</body>
+</html>
