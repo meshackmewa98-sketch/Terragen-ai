@@ -1,0 +1,126 @@
+/**
+ * EcoTrace — Global Satellite & Disaster Tracker Module
+ * Connects Leaflet to realistic global satellite tiles and active disaster feeds.
+ */
+
+// Global configuration state
+const SatelliteTracker = {
+  map: null,
+  disasterMarkers: [],
+  satelliteLayer: null,
+  
+  // Real-time Global Disaster Data API (NASA Earth Observatory Natural Event Tracker)
+  NASA_EONET_API: "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50",
+
+  /**
+   * Initializes the realistic satellite map view targeting any global location
+   * @param {string} elementId - ID of the HTML container for the map
+   * @param {number} defaultLat - Default Latitude
+   * @param {number} defaultLng - Default Longitude
+   * @param {number} zoom - Initial zoom level (1 - 18)
+   */
+  initSatelliteMap: function (elementId, defaultLat = -1.0388, defaultLng = 37.0833, zoom = 13) {
+    // 1. Initialize Map instance
+    this.map = L.map(elementId, {
+      center: [defaultLat, defaultLng],
+      zoom: zoom,
+      maxZoom: 18,
+      minZoom: 2
+    });
+
+    // 2. Add Realistic Global Satellite Imagery (ESRI World Imagery - Free High Resolution)
+    this.satelliteLayer = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 18
+      }
+    ).addTo(this.map);
+
+    // 3. Add Satellite Place Labels & Roads Overlay for Accuracy
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Labels &copy; Esri',
+        maxZoom: 18
+      }
+    ).addTo(this.map);
+
+    // 4. Fetch Global Satellite Natural Disaster Events
+    this.fetchGlobalDisasterHotspots();
+  },
+
+  /**
+   * Centers satellite view on specific global latitude and longitude
+   * @param {number} lat - Latitude (-90 to 90)
+   * @param {number} lng - Longitude (-180 to 180)
+   * @param {number} zoomLevel - Zoom depth (Default 15 for close-up satellite view)
+   */
+  focusOnLocation: function (lat, lng, zoomLevel = 15) {
+    if (!this.map) return;
+    
+    // Validate geographic boundaries
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      this.map.flyTo([lat, lng], zoomLevel, {
+        animate: true,
+        duration: 2.5
+      });
+    } else {
+      console.error("Invalid geographic coordinates submitted:", lat, lng);
+    }
+  },
+
+  /**
+   * Fetches active natural hazards, fires, and satellite-detected emissions globally
+   */
+  fetchGlobalDisasterHotspots: function () {
+    fetch(this.NASA_EONET_API)
+      .then(response => response.json())
+      .then(data => {
+        if (data && data.events) {
+          this.plotDisasterEvents(data.events);
+        }
+      })
+      .catch(err => console.warn("Satellite hazard feed connection error:", err));
+  },
+
+  /**
+   * Renders disaster spots directly over the realistic satellite map
+   * @param {Array} events - List of active global disaster events
+   */
+  plotDisasterEvents: function (events) {
+    events.forEach(event => {
+      // Parse geometry (EONET provides geoJSON coordinates [longitude, latitude])
+      const geometry = event.geometry[0];
+      if (geometry && geometry.coordinates) {
+        const lng = geometry.coordinates[0];
+        const lat = geometry.coordinates[1];
+        const category = event.categories[0] ? event.categories[0].title : "Environmental Hazard";
+
+        // Create Custom Satellite Pulse Marker
+        const pulseIcon = L.divIcon({
+          className: 'disaster-pulse-container',
+          html: `<div class="disaster-marker-critical" title="${event.title}"></div>`,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+
+        // Drop Satellite Marker
+        const marker = L.marker([lat, lng], { icon: pulseIcon })
+          .addTo(this.map)
+          .bindPopup(`
+            <div class="disaster-popup">
+              <span class="risk-badge risk-badge-critical">${category}</span>
+              <h4 style="font-weight:bold; margin-top:6px; color:#fff;">${event.title}</h4>
+              <p style="font-size:11px; color:#94a3b8; margin-top:4px;">
+                Satellite Coordinates: <br>
+                <b>Lat:</b> ${lat.toFixed(4)}, <b>Lng:</b> ${lng.toFixed(4)}
+              </p>
+            </div>
+          `);
+
+        this.disasterMarkers.push(marker);
+      }
+    });
+  }
+};
