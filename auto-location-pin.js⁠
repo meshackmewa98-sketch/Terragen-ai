@@ -1,0 +1,133 @@
+/**
+ * EcoTrace — Auto Location & High-Accuracy Pinning Module
+ * Automatically detects precise GPS coordinates and pins the position on the satellite map.
+ */
+
+const AutoLocationTracker = {
+  currentCoords: { lat: null, lng: null },
+  activeMarker: null,
+
+  /**
+   * Triggers device GPS detection with high accuracy enabled
+   * @param {Function} onSuccessCallback - Callback receiving (lat, lng, locationName)
+   * @param {Function} onErrorCallback - Callback for handling errors
+   */
+  detectUserLocation: function (onSuccessCallback, onErrorCallback) {
+    if (!navigator.geolocation) {
+      if (onErrorCallback) onErrorCallback("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    const geoOptions = {
+      enableHighAccuracy: true, // Forces hardware GPS module activation
+      timeout: 10000,           // 10 seconds timeout
+      maximumAge: 0             // Prevents returning cached/stale locations
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = parseFloat(position.coords.latitude.toFixed(6));
+        const lng = parseFloat(position.coords.longitude.toFixed(6));
+        
+        this.currentCoords = { lat, lng };
+
+        // Automatically convert lat/lng into a human-readable location name
+        this.reverseGeocode(lat, lng, (locationName) => {
+          if (onSuccessCallback) {
+            onSuccessCallback(lat, lng, locationName);
+          }
+        });
+      },
+      (error) => {
+        let errorMessage = "Unable to retrieve location.";
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Location permission was denied. Please enable GPS access.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Location information is unavailable.";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "Location request timed out.";
+            break;
+        }
+        if (onErrorCallback) onErrorCallback(errorMessage);
+      },
+      geoOptions
+    );
+  },
+
+  /**
+   * Automatically drops/updates a pin on the satellite map at detected coordinates
+   * @param {Object} leafletMap - Leaflet map instance
+   * @param {number} lat - Latitude
+   * @param {number} lng - Longitude
+   * @param {string} label - Text label for popup
+   */
+  pinLocationOnMap: function (leafletMap, lat, lng, label = "Detected Location") {
+    if (!leafletMap) return;
+
+    // Remove existing pin if present
+    if (this.activeMarker) {
+      leafletMap.removeLayer(this.activeMarker);
+    }
+
+    // Custom Glowing GPS Target Icon
+    const gpsPinIcon = L.divIcon({
+      className: 'detected-gps-pin',
+      html: `
+        <div style="
+          width: 24px; 
+          height: 24px; 
+          background: #10b981; 
+          border: 3px solid #ffffff; 
+          border-radius: 50%; 
+          box-shadow: 0 0 15px #10b981;
+          animation: pulse 1.5s infinite alternate;
+        "></div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    // Drop new marker on map
+    this.activeMarker = L.marker([lat, lng], { icon: gpsPinIcon }).addTo(leafletMap);
+
+    // Smoothly animate camera to center on the pinpointed coordinates
+    leafletMap.flyTo([lat, lng], 17, {
+      animate: true,
+      duration: 2.0
+    });
+
+    // Bind coordinate details popup
+    this.activeMarker.bindPopup(`
+      <div style="font-family: sans-serif; padding: 4px;">
+        <span style="font-size: 10px; font-weight: bold; background: #064e3b; color: #a7f3d0; padding: 2px 6px; border-radius: 4px;">
+          GPS DETECTED
+        </span>
+        <h4 style="margin: 6px 0 2px 0; font-size: 13px; color: #0f172a;">${label}</h4>
+        <p style="margin: 0; font-size: 11px; color: #64748b; font-family: monospace;">
+          Lat: ${lat}<br>Lng: ${lng}
+        </p>
+      </div>
+    `).openPopup();
+  },
+
+  /**
+   * Reverse Geocoding via OpenStreetMap Nominatim API
+   * Converts exact coordinates into location name
+   */
+  reverseGeocode: function (lat, lng, callback) {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        const placeName = data.display_name || "Unknown Location";
+        callback(placeName);
+      })
+      .catch(() => {
+        callback(`Coordinates: ${lat}, ${lng}`);
+      });
+  }
+};
